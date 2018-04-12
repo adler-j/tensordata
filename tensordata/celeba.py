@@ -1,8 +1,5 @@
-"""
-Modification of
-- https://github.com/carpedm20/DCGAN-tensorflow/blob/master/download.py
-- http://stackoverflow.com/a/39225039
-"""
+"""Loaders for CelebA dataset."""
+
 from __future__ import print_function
 import os
 import shutil
@@ -10,6 +7,10 @@ import zipfile
 import requests
 from tqdm import tqdm
 import tensorflow as tf
+import numpy as np
+from tensordata.augmentation import random_flip
+
+__all__ = ('get_celeba',)
 
 
 def download_file_from_google_drive(id, destination):
@@ -110,7 +111,7 @@ def add_splits(base_path):
 
 
 def maybe_download_celeba():
-    base_path = './data'
+    base_path = os.path.join(os.path.dirname(__file__), 'data')
     marker_file = os.path.join(base_path, "CELEB_A_READY")
     if os.path.exists(marker_file):
         return  # data downloaded
@@ -122,34 +123,49 @@ def maybe_download_celeba():
         pass # Create marker file
 
 
-def celeba(batch_size=1, shape=[256, 256]):
-    maybe_download_celeba()
+def get_celeba(batch_size=1, shape=[64, 64], split=None, augment=True):
+    with tf.name_scope('get_celeba'):
+        maybe_download_celeba()
 
-    filename_queue = tf.train.string_input_producer(
-            tf.train.match_filenames_once("./data/CelebA/images/*.jpg"))
+        base_path = os.path.join(os.path.dirname(__file__), 'data', 'CelebA')
 
-    image_reader = tf.WholeFileReader()
-    _, image_file = image_reader.read(filename_queue)
-    image = tf.image.decode_jpeg(image_file)
-    image.set_shape((218, 178, 3))
+        if split is None:
+            filename_queue = tf.train.string_input_producer(
+                    tf.train.match_filenames_once(base_path + "/images/*.jpg"))
+        elif split == 'train':
+            filename_queue = tf.train.string_input_producer(
+                    tf.train.match_filenames_once(base_path + "/splits/train/*.jpg"))
+        elif split == 'test':
+            filename_queue = tf.train.string_input_producer(
+                    tf.train.match_filenames_once(base_path + "/splits/test/*.jpg"))
+        else:
+            raise ValueError('unknown split')
 
-    images = tf.train.shuffle_batch(
-        [image],
-        batch_size=batch_size,
-        num_threads=8,
-        capacity=10 * batch_size,
-        min_after_dequeue=3 * batch_size)
+        image_reader = tf.WholeFileReader()
+        _, image_file = image_reader.read(filename_queue)
+        image = tf.image.decode_jpeg(image_file)
+        image.set_shape((218, 178, 3))
 
-    images = tf.image.crop_to_bounding_box(images, 50, 25, 128, 128)
-    images = tf.image.resize_nearest_neighbor(images, [shape[0], shape[1]])
+        images = tf.train.shuffle_batch(
+            [image],
+            batch_size=batch_size,
+            num_threads=8,
+            capacity=10 * batch_size,
+            min_after_dequeue=3 * batch_size)
 
-    return images
+        if augment:
+            images = random_flip(images)
+
+        images = tf.image.crop_to_bounding_box(images, 50, 25, 128, 128)
+        images = tf.image.resize_bicubic(images, [shape[0], shape[1]])
+
+        return tf.to_float(images)
 
 
 if __name__ == '__main__':
     # Start a new session to show example output.
     with tf.Session() as sess:
-        images = celeba()
+        images = get_celeba()
 
         # Required to get the filename matching to run.
         sess.run(tf.global_variables_initializer())

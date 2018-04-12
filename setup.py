@@ -28,5 +28,5 @@ setup(
     packages=find_packages(exclude=['*test*']),
     package_dir={'tensordata': 'tensordata'},
 
-    install_requires=['numpy', 'tensorflow']
+    install_requires=['numpy']
 )

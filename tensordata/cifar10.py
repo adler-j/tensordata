@@ -4,20 +4,61 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from datasets import ClassificationDataSet
-
 import os
 import urllib
 import numpy as np
 import tarfile
 import pickle
 from tensorflow.python.platform import gfile
+import tensorflow as tf
+from tensordata.augmentation import random_flip
 
 
-__all__ = ('cifar10',)
+__all__ = ('get_cifar10_dataset', 'get_cifar10_tf')
 
 
 SOURCE_URL = 'https://www.cs.toronto.edu/~kriz/'
+
+
+class ClassificationDataSet(object):
+
+    """Dataset for classification problems."""
+
+    def __init__(self,
+                 images,
+                 labels,
+                 label_names):
+        assert images.shape[0] == labels.shape[0]
+        assert images.ndim == 4
+        assert labels.ndim == 1
+
+        self.num_examples = images.shape[0]
+
+        self.images = images
+        self.labels = labels
+        self.label_names = label_names
+        self.epochs_completed = 0
+        self._index_in_epoch = 0
+
+    def next_batch(self, batch_size):
+        """Return the next `batch_size` examples from this data set."""
+        assert batch_size <= self.num_examples
+
+        start = self._index_in_epoch
+        self._index_in_epoch += batch_size
+        if self._index_in_epoch > self.num_examples:
+            # Finished epoch
+            self.epochs_completed += 1
+            # Shuffle the data
+            perm = np.arange(self._num_examples)
+            np.random.shuffle(perm)
+            self.images = self.images[perm]
+            self.labels = self.labels[perm]
+            # Start next epoch
+            start = 0
+            self._index_in_epoch = batch_size
+        end = self._index_in_epoch
+        return self.images[start:end], self.labels[start:end]
 
 
 def maybe_download(filename, work_directory, source_url):
@@ -49,8 +90,7 @@ def unpickle(file):
     return dct
 
 
-def cifar10(train_dir='data/CIFAR10-data',
-            test_size=5000):
+def get_cifar10_dataset(train_dir='data/CIFAR10-data', split=None):
     filename = 'cifar-10-python.tar.gz'
 
     maybe_download(filename, train_dir,
@@ -58,8 +98,11 @@ def cifar10(train_dir='data/CIFAR10-data',
 
     data = []
     labels = []
-    for i in range(1, 6):
-        path = os.path.join(train_dir, 'cifar-10-batches-py', 'data_batch_{}'.format(i))
+    for i in range(1, 7):
+        if i < 6:
+            path = os.path.join(train_dir, 'cifar-10-batches-py', 'data_batch_{}'.format(i))
+        if i < 6:
+            path = os.path.join(train_dir, 'cifar-10-batches-py', 'test_batch')
         dct = unpickle(path)
         data.append(dct[b'data'])
         labels.append(np.array(dct[b'labels']))
@@ -71,12 +114,18 @@ def cifar10(train_dir='data/CIFAR10-data',
 
     labels = np.concatenate(labels, axis=0)
 
-    assert 0 <= test_size <= len(data_arr)
+    if split is None:
+        pass
+    elif split == 'train':
+        images = images[:-10000]
+        labels = labels[:-10000]
+    elif split == 'test':
+        images = images[10000:]
+        labels = labels[10000:]
+    else:
+        raise ValueError('unknown split')
 
-    validation_images = images[:test_size]
-    validation_labels = labels[:test_size]
-    train_images = images[test_size:]
-    train_labels = labels[test_size:]
+    print(images.shape)
 
     label_names = ['airplane',
                    'automobile',
@@ -89,24 +138,64 @@ def cifar10(train_dir='data/CIFAR10-data',
                    'ship',
                    'truck']
 
-    train = ClassificationDataSet(train_images,
-                                  train_labels,
-                                  label_names=label_names)
-    test = ClassificationDataSet(validation_images,
-                                 validation_labels,
-                                 label_names=label_names)
+    dataset = ClassificationDataSet(images,
+                                    labels,
+                                    label_names=label_names)
 
-    return train, test
+    return dataset
+
+
+def get_cifar10_tf(batch_size=2, shape=[64, 64], split=None, augment=True):
+    dataset = get_cifar10_dataset(split=split)
+
+    images = tf.constant(dataset.images[:100], dtype='float32')
+    labels = tf.constant(dataset.labels[:100], dtype='int32')
+
+    images_batch, labels_batch = tf.train.shuffle_batch(
+        [images, labels],
+        batch_size=batch_size,
+        num_threads=8,
+        capacity=10 * batch_size,
+        min_after_dequeue=3 * batch_size,
+        enqueue_many=True)
+
+    if augment:
+        images_batch = random_flip(images_batch)
+
+    if shape != [32, 32]:
+        images_batch = tf.image.resize_bicubic(images_batch,
+                                               [shape[0], shape[1]])
+
+    return tf.to_float(images_batch), labels_batch
 
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
-    train, test = cifar10()
+    # Simple dataset
+    dataset = get_cifar10_dataset()
 
-    batch_images, test_images = train.next_batch(5)
+    batch_images, test_images = dataset.next_batch(5)
 
     for image, label in zip(batch_images, test_images):
         plt.figure()
-        plt.title(train.label_names[label])
+        plt.title(dataset.label_names[label])
         plt.imshow(image)
+
+    # Pure tensorflow
+    # Start a new session to show example output.
+    with tf.Session() as sess:
+        images, labels = get_cifar10_tf()
+
+        # Required to get the filename matching to run.
+        sess.run(tf.global_variables_initializer())
+        sess.run(tf.local_variables_initializer())
+
+        # Coordinate the loading of image files.
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(coord=coord)
+
+        for i in range(100):
+            # Get an image tensor and print its value.
+            image, label = sess.run([images, labels])
+            print(image.shape, label)
