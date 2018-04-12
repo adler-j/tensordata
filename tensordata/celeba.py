@@ -157,7 +157,7 @@ def get_celeba(batch_size=1, shape=[64, 64], split=None, augment=True):
             images = random_flip(images)
 
         images = tf.image.crop_to_bounding_box(images, 50, 25, 128, 128)
-        images = tf.image.resize_bicubic(images, [shape[0], shape[1]])
+        images = tf.image.resize_bilinear(images, [shape[0], shape[1]])
 
         return tf.to_float(images)
 

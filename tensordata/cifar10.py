@@ -14,10 +14,22 @@ import tensorflow as tf
 from tensordata.augmentation import random_flip
 
 
-__all__ = ('get_cifar10_dataset', 'get_cifar10_tf')
+__all__ = ('get_cifar10_dataset', 'get_cifar10_tf', 'CIFAR10_LABELS')
 
 
 SOURCE_URL = 'https://www.cs.toronto.edu/~kriz/'
+
+
+CIFAR10_LABELS = ['airplane',
+                  'automobile',
+                  'bird',
+                  'cat',
+                  'deer',
+                  'dog',
+                  'frog',
+                  'horse',
+                  'ship',
+                  'truck']
 
 
 class ClassificationDataSet(object):
@@ -26,8 +38,7 @@ class ClassificationDataSet(object):
 
     def __init__(self,
                  images,
-                 labels,
-                 label_names):
+                 labels):
         assert images.shape[0] == labels.shape[0]
         assert images.ndim == 4
         assert labels.ndim == 1
@@ -36,7 +47,6 @@ class ClassificationDataSet(object):
 
         self.images = images
         self.labels = labels
-        self.label_names = label_names
         self.epochs_completed = 0
         self._index_in_epoch = 0
 
@@ -90,8 +100,9 @@ def unpickle(file):
     return dct
 
 
-def get_cifar10_dataset(train_dir='data/CIFAR10-data', split=None):
+def get_cifar10_dataset(split=None):
     filename = 'cifar-10-python.tar.gz'
+    train_dir = os.path.dirname(__file__) + '/data/CIFAR10-data'
 
     maybe_download(filename, train_dir,
                    SOURCE_URL + filename)
@@ -120,53 +131,40 @@ def get_cifar10_dataset(train_dir='data/CIFAR10-data', split=None):
         images = images[:-10000]
         labels = labels[:-10000]
     elif split == 'test':
-        images = images[10000:]
-        labels = labels[10000:]
+        images = images[-10000:]
+        labels = labels[-10000:]
     else:
         raise ValueError('unknown split')
 
-    print(images.shape)
-
-    label_names = ['airplane',
-                   'automobile',
-                   'bird',
-                   'cat',
-                   'deer',
-                   'dog',
-                   'frog',
-                   'horse',
-                   'ship',
-                   'truck']
-
     dataset = ClassificationDataSet(images,
-                                    labels,
-                                    label_names=label_names)
+                                    labels)
 
     return dataset
 
 
-def get_cifar10_tf(batch_size=2, shape=[64, 64], split=None, augment=True):
-    dataset = get_cifar10_dataset(split=split)
+def get_cifar10_tf(batch_size=2, shape=[32, 32], split=None, augment=True):
+    with tf.name_scope('get_cifar10_tf'):
+        dataset = get_cifar10_dataset(split=split)
 
-    images = tf.constant(dataset.images[:100], dtype='float32')
-    labels = tf.constant(dataset.labels[:100], dtype='int32')
+        images = tf.constant(dataset.images, dtype='float32')
+        labels = tf.constant(dataset.labels, dtype='int32')
 
-    images_batch, labels_batch = tf.train.shuffle_batch(
-        [images, labels],
-        batch_size=batch_size,
-        num_threads=8,
-        capacity=10 * batch_size,
-        min_after_dequeue=3 * batch_size,
-        enqueue_many=True)
+        images_batch, labels_batch = tf.train.shuffle_batch(
+            [images, labels],
+            batch_size=batch_size,
+            num_threads=8,
+            capacity=10 * batch_size,
+            min_after_dequeue=3 * batch_size,
+            enqueue_many=True)
 
-    if augment:
-        images_batch = random_flip(images_batch)
+        if augment:
+            images_batch = random_flip(images_batch)
 
-    if shape != [32, 32]:
-        images_batch = tf.image.resize_bicubic(images_batch,
-                                               [shape[0], shape[1]])
+        if shape != [32, 32]:
+            images_batch = tf.image.resize_bilinear(images_batch,
+                                                    [shape[0], shape[1]])
 
-    return tf.to_float(images_batch), labels_batch
+        return tf.to_float(images_batch), labels_batch
 
 
 if __name__ == '__main__':
@@ -179,7 +177,7 @@ if __name__ == '__main__':
 
     for image, label in zip(batch_images, test_images):
         plt.figure()
-        plt.title(dataset.label_names[label])
+        plt.title(CIFAR10_LABELS[label])
         plt.imshow(image)
 
     # Pure tensorflow
