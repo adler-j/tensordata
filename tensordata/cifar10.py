@@ -116,10 +116,10 @@ def get_cifar10_dataset(split=None):
             path = os.path.join(train_dir, 'cifar-10-batches-py', 'test_batch')
         dct = unpickle(path)
         data.append(dct[b'data'])
-        labels.append(np.array(dct[b'labels']))
+        labels.append(np.array(dct[b'labels'], dtype='int32'))
 
     data_arr = np.concatenate(data, axis=0)
-    raw_float = np.array(data_arr, dtype=float) / 255.0
+    raw_float = np.array(data_arr, dtype='float32') / 256.0
     images = raw_float.reshape([-1, 3, 32, 32])
     images = images.transpose([0, 2, 3, 1])
 
@@ -142,7 +142,7 @@ def get_cifar10_dataset(split=None):
     return dataset
 
 
-def get_cifar10_tf(batch_size=2, shape=[32, 32], split=None, augment=True):
+def get_cifar10_tf(batch_size=1, shape=[32, 32], split=None, augment=True):
     with tf.name_scope('get_cifar10_tf'):
         dataset = get_cifar10_dataset(split=split)
 
@@ -159,17 +159,21 @@ def get_cifar10_tf(batch_size=2, shape=[32, 32], split=None, augment=True):
 
         if augment:
             images_batch = random_flip(images_batch)
+            images_batch += tf.random_uniform(tf.shape(images_batch),
+                                              0.0, 1.0/256.0)
 
         if shape != [32, 32]:
             images_batch = tf.image.resize_bilinear(images_batch,
                                                     [shape[0], shape[1]])
 
-        return tf.to_float(images_batch), labels_batch
+        return images_batch, labels_batch
 
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
+    images, labels = get_cifar10_tf()
+    raise Exception
     # Simple dataset
     dataset = get_cifar10_dataset()
 
