@@ -112,7 +112,7 @@ def get_cifar10_dataset(split=None):
     for i in range(1, 7):
         if i < 6:
             path = os.path.join(train_dir, 'cifar-10-batches-py', 'data_batch_{}'.format(i))
-        if i < 6:
+        elif i == 6:
             path = os.path.join(train_dir, 'cifar-10-batches-py', 'test_batch')
         dct = unpickle(path)
         data.append(dct[b'data'])
@@ -149,13 +149,13 @@ def get_cifar10_tf(batch_size=1, shape=[32, 32], split=None, augment=True):
         images = tf.constant(dataset.images, dtype='float32')
         labels = tf.constant(dataset.labels, dtype='int32')
 
-        images_batch, labels_batch = tf.train.shuffle_batch(
-            [images, labels],
+        image, label = tf.train.slice_input_producer([images, labels],
+                                                     shuffle=True)
+
+        images_batch, labels_batch = tf.train.batch(
+            [image, label],
             batch_size=batch_size,
-            num_threads=8,
-            capacity=10 * batch_size,
-            min_after_dequeue=3 * batch_size,
-            enqueue_many=True)
+            num_threads=8)
 
         if augment:
             images_batch = random_flip(images_batch)
@@ -168,12 +168,11 @@ def get_cifar10_tf(batch_size=1, shape=[32, 32], split=None, augment=True):
 
         return images_batch, labels_batch
 
-
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
     images, labels = get_cifar10_tf()
-    raise Exception
+
     # Simple dataset
     dataset = get_cifar10_dataset()
 
