@@ -152,10 +152,15 @@ def get_cifar10_tf(batch_size=1, shape=[32, 32], split=None, augment=True):
         image, label = tf.train.slice_input_producer([images, labels],
                                                      shuffle=True)
 
+        min_fraction_of_examples_in_queue = 0.4
+        min_queue_examples = int(dataset.labels.size *
+                                 min_fraction_of_examples_in_queue)
+
         images_batch, labels_batch = tf.train.batch(
             [image, label],
             batch_size=batch_size,
-            num_threads=8)
+            num_threads=8,
+            capacity=min_queue_examples + 3 * batch_size)
 
         if augment:
             images_batch = random_flip(images_batch)
