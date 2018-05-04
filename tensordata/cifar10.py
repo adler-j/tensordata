@@ -142,7 +142,8 @@ def get_cifar10_dataset(split=None):
     return dataset
 
 
-def get_cifar10_tf(batch_size=1, shape=[32, 32], split=None, augment=True):
+def get_cifar10_tf(batch_size=1, shape=[32, 32], split=None, augment=True,
+                   start_queue_runner=True):
     with tf.name_scope('get_cifar10_tf'):
         dataset = get_cifar10_dataset(split=split)
 
@@ -152,15 +153,10 @@ def get_cifar10_tf(batch_size=1, shape=[32, 32], split=None, augment=True):
         image, label = tf.train.slice_input_producer([images, labels],
                                                      shuffle=True)
 
-        min_fraction_of_examples_in_queue = 0.4
-        min_queue_examples = int(dataset.labels.size *
-                                 min_fraction_of_examples_in_queue)
-
         images_batch, labels_batch = tf.train.batch(
             [image, label],
             batch_size=batch_size,
-            num_threads=8,
-            capacity=min_queue_examples + 3 * batch_size)
+            num_threads=8)
 
         if augment:
             images_batch = random_flip(images_batch)
@@ -171,12 +167,14 @@ def get_cifar10_tf(batch_size=1, shape=[32, 32], split=None, augment=True):
             images_batch = tf.image.resize_bilinear(images_batch,
                                                     [shape[0], shape[1]])
 
+        if start_queue_runner:
+            coord = tf.train.Coordinator()
+            tf.train.start_queue_runners(coord=coord)
+
         return images_batch, labels_batch
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
-
-    images, labels = get_cifar10_tf()
 
     # Simple dataset
     dataset = get_cifar10_dataset()
@@ -192,14 +190,6 @@ if __name__ == '__main__':
     # Start a new session to show example output.
     with tf.Session() as sess:
         images, labels = get_cifar10_tf()
-
-        # Required to get the filename matching to run.
-        sess.run(tf.global_variables_initializer())
-        sess.run(tf.local_variables_initializer())
-
-        # Coordinate the loading of image files.
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(coord=coord)
 
         for i in range(100):
             # Get an image tensor and print its value.
