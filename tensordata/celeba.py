@@ -156,7 +156,7 @@ def get_celeba_tf(batch_size=1, shape=[64, 64], split=None, augment=True):
             min_after_dequeue=min_after_dequeue)
 
         images = tf.to_float(images)
-        images = (images - 128.0) / 256.0
+        images = images / 256.0
 
         if augment:
             images = random_flip(images)
