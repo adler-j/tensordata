@@ -7,10 +7,9 @@ import zipfile
 import requests
 from tqdm import tqdm
 import tensorflow as tf
-import numpy as np
 from tensordata.augmentation import random_flip
 
-__all__ = ('get_celeba',)
+__all__ = ('get_celeba_tf',)
 
 
 def download_file_from_google_drive(id, destination):
@@ -123,7 +122,7 @@ def maybe_download_celeba():
         pass # Create marker file
 
 
-def get_celeba(batch_size=1, shape=[64, 64], split=None, augment=True):
+def get_celeba_tf(batch_size=1, shape=[64, 64], split=None, augment=True):
     with tf.name_scope('get_celeba'):
         maybe_download_celeba()
 
@@ -146,30 +145,38 @@ def get_celeba(batch_size=1, shape=[64, 64], split=None, augment=True):
         image = tf.image.decode_jpeg(image_file)
         image.set_shape((218, 178, 3))
 
+        min_after_dequeue = 5000
+        capacity = min_after_dequeue + 3 * batch_size
+
         images = tf.train.shuffle_batch(
             [image],
             batch_size=batch_size,
             num_threads=8,
-            capacity=10 * batch_size,
-            min_after_dequeue=3 * batch_size)
+            capacity=capacity,
+            min_after_dequeue=min_after_dequeue)
+
+        images = tf.to_float(images)
+        images = (images - 128.0) / 256.0
 
         if augment:
             images = random_flip(images)
+            images += tf.random_uniform(tf.shape(images),
+                                        0.0, 1.0/256.0)
 
         images = tf.image.crop_to_bounding_box(images, 50, 25, 128, 128)
         images = tf.image.resize_bilinear(images, [shape[0], shape[1]])
 
-        return tf.to_float(images)
+        return images
 
 
 if __name__ == '__main__':
     # Start a new session to show example output.
     with tf.Session() as sess:
-        images = get_celeba()
+        images = get_celeba_tf()
 
         # Required to get the filename matching to run.
-        sess.run(tf.global_variables_initializer())
-        sess.run(tf.local_variables_initializer())
+        sess.run([tf.global_variables_initializer(),
+                  tf.local_variables_initializer()])
 
         # Coordinate the loading of image files.
         coord = tf.train.Coordinator()
