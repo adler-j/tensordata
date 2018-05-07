@@ -187,11 +187,23 @@ if __name__ == '__main__':
         plt.imshow(image)
 
     # Pure tensorflow
-    # Start a new session to show example output.
     with tf.Session() as sess:
         images, labels = get_cifar10_tf()
 
+        # Required to get the filename matching to run.
+        sess.run([tf.global_variables_initializer(),
+                  tf.local_variables_initializer()])
+
+        # Coordinate the loading of image files.
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(coord=coord)
+
         for i in range(100):
             # Get an image tensor and print its value.
-            image, label = sess.run([images, labels])
-            print(image.shape, label)
+            image_tensor = sess.run(images)
+            print(image_tensor.shape)
+
+
+    # Finish off the filename queue coordinator.
+    coord.request_stop()
+    coord.join(threads)

@@ -9,3 +9,6 @@ __all__ += cifar10.__all__
 
 from .celeba import *
 __all__ += celeba.__all__
+
+from .mnist import *
+__all__ += mnist.__all__
