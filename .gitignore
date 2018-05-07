@@ -90,4 +90,5 @@ target/
 
 # Documentation build files
 tensordata/data/*
+tensordata/MNIST_data/*
 examples/data/*
